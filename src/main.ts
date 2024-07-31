@@ -1,4 +1,5 @@
 // Ensure these elements exist in your HTML
+
 const demosSection = document.getElementById("demos") as HTMLElement;
 let gestureRecognizer: any;
 let runningMode = "IMAGE";
