@@ -3,6 +3,8 @@ python -m venv .venv
 source .venv/bin/activate
 pip install mediapipe opencv-python tensorflow
 
+python app_flask.py
+
 ###
 
 # hand-gesture-recognition-using-mediapipe
