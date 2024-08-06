@@ -1,5 +1,5 @@
 from flask import Flask, render_template, Response
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 import cv2 as cv
 import copy
 import csv
@@ -8,6 +8,7 @@ import numpy as np
 import mediapipe as mp
 import base64
 import json
+import time
 from utils import CvFpsCalc
 from model import KeyPointClassifier, PointHistoryClassifier
 from draw_landmarks import draw_landmarks
@@ -57,13 +58,24 @@ history_length = 16
 point_history = deque(maxlen=history_length)
 finger_gesture_history = deque(maxlen=history_length)
 
-# Main processing function
+# Map gestures to Rock, Paper, Scissors
+gesture_map = {
+    'Open': 'Paper',
+    'Close': 'Rock',
+    'Pointer': 'Scissors'
+}
+
 def process_frame():
+    last_gesture_time = time.time()
+    gesture_interval = 2  # Time interval in seconds between gesture recognitions
+    gesture_countdown = ['Rock', 'Paper', 'Scissors', 'Shoot']  # Countdown sequence
+    countdown_index = 0
+    consistent_gesture = None
+
     while True:
         fps = cvFpsCalc.get()
         ret, image = cap.read()
         if not ret:
-            print("Failed to read frame from camera.")
             break
         image = cv.flip(image, 1)
         debug_image = copy.deepcopy(image)
@@ -81,6 +93,8 @@ def process_frame():
                 pre_processed_landmark_list = pre_process_landmark(landmark_list)
                 pre_processed_point_history_list = pre_process_point_history(debug_image, point_history)
                 hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
+                hand_sign = keypoint_classifier_labels[hand_sign_id]
+
                 if hand_sign_id == 2:
                     point_history.append(landmark_list[8])
                 else:
@@ -95,8 +109,17 @@ def process_frame():
                 debug_image = draw_bounding_rect(True, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, landmark_list)
                 debug_image = draw_info_text(debug_image, brect, handedness, keypoint_classifier_labels[hand_sign_id], point_history_classifier_labels[most_common_fg_id[0][0]])
-                
-                gesture = keypoint_classifier_labels[hand_sign_id]  # Get the gesture name
+
+                current_time = time.time()
+                if current_time - last_gesture_time >= gesture_interval:
+                    if countdown_index < len(gesture_countdown):
+                        gesture = gesture_countdown[countdown_index]
+                        countdown_index += 1
+                        last_gesture_time = current_time
+                    else:
+                        gesture = gesture_map.get(hand_sign, None)
+                        if gesture:
+                            consistent_gesture = gesture
 
         else:
             point_history.append([0, 0])
@@ -106,18 +129,16 @@ def process_frame():
 
         # Encode the image as JPEG
         ret, jpeg = cv.imencode('.jpg', debug_image)
-        if not ret:
-            print("Failed to encode frame as JPEG.")
-            break
-
         frame = base64.b64encode(jpeg.tobytes()).decode('utf-8')
 
-        if gesture:
-            frame_data = json.dumps({"frame": frame, "gesture": gesture})
-            socketio.emit('frame_data', frame_data)
+        if consistent_gesture:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame.encode() + b'\r\n\r\n' +
+                   b'--frame\r\n'
+                   b'Content-Type: application/json\r\n\r\n' + json.dumps({"gesture": consistent_gesture}).encode() + b'\r\n\r\n')
         else:
-            frame_data = json.dumps({"frame": frame})
-            socketio.emit('frame_data', frame_data)
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame.encode() + b'\r\n\r\n')
 
 @app.route('/')
 def index():
@@ -130,7 +151,6 @@ def video_feed():
 @socketio.on('connect')
 def on_connect():
     print('Client connected')
-    socketio.start_background_task(target=process_frame)
 
 @socketio.on('disconnect')
 def on_disconnect():

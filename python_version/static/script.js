@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultElement = document.getElementById('result');
 
     const gestures = ['Rock', 'Paper', 'Scissors'];
+    const countdownMessages = ['Rock', 'Paper', 'Scissors', 'Shoot'];
+    let lastGestureTime = Date.now();
+    const gestureInterval = 2000;  // Time interval in milliseconds between gesture recognitions
+    let countdownIndex = 0;
+    let consistentGesture = null;
 
     // Function to get a random gesture for the AI
     function getRandomGesture() {
@@ -31,26 +36,59 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`You: ${userGesture} - AI: ${aiGesture}\n${result}`);
     }
 
-    // WebSocket connection
-    const socket = io();
-
-    socket.on('connect', () => {
-        console.log('Connected to the server');
-    });
-
-    socket.on('frame_data', (data) => {
-        const parsedData = JSON.parse(data);
-        if (parsedData.frame) {
-            const imgSrc = `data:image/jpeg;base64,${parsedData.frame}`;
-            videoElement.src = imgSrc;
+    // Function to process the gesture data
+    function processGestureData(data) {
+        const currentTime = Date.now();
+        if (currentTime - lastGestureTime >= gestureInterval) {
+            if (countdownIndex < countdownMessages.length) {
+                gestureOutputElement.innerText = `Countdown: ${countdownMessages[countdownIndex]}`;
+                countdownIndex++;
+                lastGestureTime = currentTime;  // Update the last gesture time
+            } else if (data.gesture) {
+                gestureOutputElement.innerText = `Gesture: ${data.gesture}`;
+                consistentGesture = data.gesture;
+                handleGame(consistentGesture);
+                countdownIndex = 0;  // Reset countdown
+                consistentGesture = null;  // Reset consistent gesture
+            }
         }
-        if (parsedData.gesture) {
-            gestureOutputElement.innerText = `Gesture: ${parsedData.gesture}`;
-            handleGame(parsedData.gesture);
-        }
-    });
+    }
 
-    socket.on('disconnect', () => {
-        console.log('Disconnected from the server');
-    });
+    // Function to start the video feed and listen for gestures
+    async function startVideoFeed() {
+        console.log("Starting video feed");
+        const response = await fetch('/video_feed');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+
+        let jsonBuffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value, { stream: true });
+            console.log("Received text:", text);
+
+            const parts = text.split('--frame');
+
+            for (let part of parts) {
+                if (part.includes('Content-Type: image/jpeg')) {
+                    const imgPart = part.split('Content-Type: image/jpeg')[1].trim();
+                    const imgSrc = `data:image/jpeg;base64,${imgPart}`;
+                    videoElement.src = imgSrc;
+                } else if (part.includes('Content-Type: application/json')) {
+                    const jsonPart = part.split('Content-Type: application/json')[1].trim();
+                    try {
+                        const gestureData = JSON.parse(jsonPart);
+                        processGestureData(gestureData);
+                    } catch (e) {
+                        console.error("Error parsing gesture data", e);
+                    }
+                }
+            }
+        }
+    }
+
+    startVideoFeed();
 });
