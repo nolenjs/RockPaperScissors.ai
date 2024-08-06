@@ -1,25 +1,25 @@
 from flask import Flask, render_template, Response
-from flask_socketio import SocketIO, emit
 import cv2 as cv
 import copy
-import csv, os
-from collections import Counter, deque
+from collections import deque, Counter
 import numpy as np
 import mediapipe as mp
-import base64
-from mediapipe.tasks.python import vision
-import time
 from utils import CvFpsCalc
+from model import KeyPointClassifier, PointHistoryClassifier
 from draw_landmarks import draw_landmarks
-from hand_utils import (
+from app import (
     calc_bounding_rect,
     calc_landmark_list,
+    pre_process_landmark,
+    pre_process_point_history,
     draw_bounding_rect,
+    draw_info_text,
     draw_info
 )
+import os
+from mediapipe.tasks.python import vision
 
 app = Flask(__name__)
-socketio = SocketIO(app)
 
 # Initialize video capture
 cap = cv.VideoCapture(0)
@@ -45,13 +45,7 @@ recognizer = vision.GestureRecognizer.create_from_model_path(model_path)
 # Initialize FPS calculator
 cvFpsCalc = CvFpsCalc(buffer_len=10)
 
-# Map gestures to Rock, Paper, Scissors
-gesture_map = {
-    'Open': 'Paper',
-    'Close': 'Rock',
-    'Pointer': 'Scissors'
-}
-
+# Main processing function
 def process_frame():
     while True:
         fps = cvFpsCalc.get()
@@ -82,6 +76,8 @@ def process_frame():
                 
                 debug_image = draw_bounding_rect(True, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, landmark_list)
+        # else:
+        #     point_history.append([0, 0])
 
         # debug_image = draw_point_history(debug_image, point_history)
         debug_image = draw_info(debug_image, fps, 0, -1)
@@ -96,17 +92,9 @@ def process_frame():
 def index():
     return render_template('index.html')
 
-@socketio.on('connect')
-def on_connect():
-    print('Client connected')
-
-@socketio.on('disconnect')
-def on_disconnect():
-    print('Client disconnected')
-
-@socketio.on('request_video_feed')
-def handle_request_video_feed():
-    socketio.start_background_task(process_frame)
+@app.route('/video_feed')
+def video_feed():
+    return Response(process_frame(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001)
