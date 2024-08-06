@@ -11,10 +11,9 @@
 </head>
 
 <body>
-    <h1>Rock-Paper-Scissors AI</h1>
+    <h1>Game Screen</h1>
     <div id="video-container">
-        <img id="video-feed" width="640" height="480" />
-        <canvas id="output_canvas"></canvas>
+        <img src="{{ url_for('video_feed') }}" width="960" height="540">
     </div>
     <div id="gesture_output">Gesture: None</div>
     <div id="result">Result: None</div>
