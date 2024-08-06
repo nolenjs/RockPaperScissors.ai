@@ -16,7 +16,23 @@
         <img src="{{ url_for('video_feed') }}" width="960" height="540">
     </div>
     <div id="gesture_output">Gesture: None</div>
+    <div id="countdown">Countdown: </div>
     <div id="result">Result: None</div>
+    <button id="start-game-button">Start Game</button>
+    <script>
+        const socket = io();
+        document.getElementById('start-game-button').addEventListener('click', () => {
+            socket.emit('start_game');
+        });
+        socket.on('countdown', (data) => {
+            document.getElementById('countdown').innerText = `Countdown: ${data}`;
+        });
+        socket.on('gesture', (data) => {
+            document.getElementById('gesture_output').innerText = `Gesture: ${data}`;
+        });
+        socket.on('result', (data) => {
+            document.getElementById('result').innerText = `Result: ${data}`;
+        });
+    </script>
 </body>
-
 </html>

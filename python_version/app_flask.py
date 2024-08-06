@@ -1,6 +1,6 @@
 from flask import Flask, render_template, Response
 import cv2 as cv
-import copy
+import copy, time
 from collections import deque, Counter
 import numpy as np
 import mediapipe as mp
@@ -10,16 +10,17 @@ from draw_landmarks import draw_landmarks
 from app import (
     calc_bounding_rect,
     calc_landmark_list,
-    pre_process_landmark,
-    pre_process_point_history,
     draw_bounding_rect,
-    draw_info_text,
     draw_info
 )
 import os
 from mediapipe.tasks.python import vision
+from flask_socketio import SocketIO, emit
+import threading
+import random
 
 app = Flask(__name__)
+socketio = SocketIO(app)
 
 # Initialize video capture
 cap = cv.VideoCapture(0)
@@ -45,8 +46,14 @@ recognizer = vision.GestureRecognizer.create_from_model_path(model_path)
 # Initialize FPS calculator
 cvFpsCalc = CvFpsCalc(buffer_len=10)
 
+last_gesture = "None"
+
+def get_last_gesture():
+    return last_gesture
+
 # Main processing function
 def process_frame():
+    global last_gesture
     while True:
         fps = cvFpsCalc.get()
         ret, image = cap.read()
@@ -70,7 +77,8 @@ def process_frame():
                 
                 if recognition_result.gestures:
                     top_gesture = recognition_result.gestures[0][0]
-                    print(f"Gesture recognized: {top_gesture.category_name} ({top_gesture.score})")
+                    last_gesture = top_gesture.category_name  # Update last_gesture
+                    # print(f"Gesture recognized: {top_gesture.category_name} ({top_gesture.score})")
                     # Draw gesture result on the image
                     cv.putText(debug_image, f"Gesture: {top_gesture.category_name}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv.LINE_AA)
                 
@@ -96,5 +104,34 @@ def index():
 def video_feed():
     return Response(process_frame(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@socketio.on('start_game')
+def start_game():
+    gestures = ['rock', 'paper', 'scissors']
+    for i in range(len(gestures)):
+        emit('countdown', gestures[i])
+        time.sleep(0.75)
+
+    emit('countdown', 'Shoot!')
+    time.sleep(0.25)
+
+    success, frame = cap.read()
+    last = get_last_gesture()
+    if success:
+        emit('gesture', f'{last}')
+        computer_gesture = random.choice(gestures)
+    
+    # Determine the winner
+    if last == computer_gesture:
+        result = "It's a tie!"
+    elif (last == 'rock' and computer_gesture == 'scissors') or \
+         (last == 'paper' and computer_gesture == 'rock') or \
+         (last == 'scissors' and computer_gesture == 'paper'):
+        result = "You win!"
+    else:
+        result = "Computer wins!"
+
+    # Emit the result
+    socketio.emit('result', f'{result} (Computer chose {computer_gesture})')
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    socketio.run(app, host='0.0.0.0', port=5001)
