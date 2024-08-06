@@ -3,10 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Gesture Recognition</title>
+    <title>Rock-Paper-Scissors AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
 </head>
 <body>
-    <h1>Hand Gesture Recognition</h1>
-    <img src="{{ url_for('video_feed') }}" width="960" height="540">
+    <h1>Rock-Paper-Scissors AI</h1>
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+    <div id="gesture_output">Gesture: None</div>
+    <div id="result">Result: None</div>
 </body>
 </html>

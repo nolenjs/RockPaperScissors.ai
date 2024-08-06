@@ -5,17 +5,19 @@ import csv
 from collections import Counter, deque
 import numpy as np
 import mediapipe as mp
+import json
 from utils import CvFpsCalc
 from model import KeyPointClassifier, PointHistoryClassifier
 from draw_landmarks import draw_landmarks
-from app import (
+from hand_utils import (
     calc_bounding_rect,
     calc_landmark_list,
     pre_process_landmark,
     pre_process_point_history,
     draw_bounding_rect,
     draw_info_text,
-    draw_info
+    draw_info,
+    draw_point_history
 )
 
 app = Flask(__name__)
@@ -52,13 +54,6 @@ history_length = 16
 point_history = deque(maxlen=history_length)
 finger_gesture_history = deque(maxlen=history_length)
 
-# Function to draw point history
-def draw_point_history(image, point_history):
-    for index, point in enumerate(point_history):
-        if point[0] != 0 and point[1] != 0:
-            cv.circle(image, (point[0], point[1]), 1 + int(index / 2), (152, 251, 152), 2)
-    return image
-
 # Main processing function
 def process_frame():
     while True:
@@ -72,6 +67,8 @@ def process_frame():
         image.flags.writeable = False
         results = hands.process(image)
         image.flags.writeable = True
+
+        gesture = None
 
         if results.multi_hand_landmarks:
             for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
@@ -94,6 +91,9 @@ def process_frame():
                 debug_image = draw_bounding_rect(True, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, landmark_list)
                 debug_image = draw_info_text(debug_image, brect, handedness, keypoint_classifier_labels[hand_sign_id], point_history_classifier_labels[most_common_fg_id[0][0]])
+                
+                gesture = keypoint_classifier_labels[hand_sign_id]  # Get the gesture name
+
         else:
             point_history.append([0, 0])
 
@@ -103,8 +103,15 @@ def process_frame():
         # Encode the image as JPEG
         ret, jpeg = cv.imencode('.jpg', debug_image)
         frame = jpeg.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+        
+        if gesture:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n' +
+                   b'--frame\r\n'
+                   b'Content-Type: application/json\r\n\r\n' + json.dumps({"gesture": gesture}).encode() + b'\r\n\r\n')
+        else:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
 
 @app.route('/')
 def index():

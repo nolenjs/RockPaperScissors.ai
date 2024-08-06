@@ -1,0 +1,28 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+}
+
+#video-container {
+    position: relative;
+    display: inline-block;
+}
+
+#webcam {
+    width: 640px;
+    height: 480px;
+    border: 2px solid black;
+}
+
+#output_canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 640px;
+    height: 480px;
+}
+
+#gesture_output, #result {
+    margin
