@@ -55,39 +55,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Function to start the video feed and listen for gestures
-    async function startVideoFeed() {
+    function startVideoFeed() {
         console.log("Starting video feed");
-        const response = await fetch('/video_feed');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
 
-        let jsonBuffer = '';
+        const socket = io();
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
+        socket.on('connect', () => {
+            console.log('Connected to the server');
+            socket.emit('request_video_feed');
+        });
 
-            const text = decoder.decode(value, { stream: true });
-            console.log("Received text:", text);
+        socket.on('video_feed', (data) => {
+            console.log("Received data:", data);
 
-            const parts = text.split('--frame');
+            const frame = `data:image/jpeg;base64,${data.frame}`;
+            videoElement.src = frame;
 
-            for (let part of parts) {
-                if (part.includes('Content-Type: image/jpeg')) {
-                    const imgPart = part.split('Content-Type: image/jpeg')[1].trim();
-                    const imgSrc = `data:image/jpeg;base64,${imgPart}`;
-                    videoElement.src = imgSrc;
-                } else if (part.includes('Content-Type: application/json')) {
-                    const jsonPart = part.split('Content-Type: application/json')[1].trim();
-                    try {
-                        const gestureData = JSON.parse(jsonPart);
-                        processGestureData(gestureData);
-                    } catch (e) {
-                        console.error("Error parsing gesture data", e);
-                    }
-                }
+            if (data.gesture) {
+                processGestureData(data);
             }
-        }
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from the server');
+        });
     }
 
     startVideoFeed();

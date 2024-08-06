@@ -1,5 +1,5 @@
 from flask import Flask, render_template, Response
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 import cv2 as cv
 import copy
 import csv
@@ -131,22 +131,12 @@ def process_frame():
         ret, jpeg = cv.imencode('.jpg', debug_image)
         frame = base64.b64encode(jpeg.tobytes()).decode('utf-8')
 
-        if consistent_gesture:
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame.encode() + b'\r\n\r\n' +
-                   b'--frame\r\n'
-                   b'Content-Type: application/json\r\n\r\n' + json.dumps({"gesture": consistent_gesture}).encode() + b'\r\n\r\n')
-        else:
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame.encode() + b'\r\n\r\n')
+        # Emit the frame and gesture data via WebSocket
+        socketio.emit('video_feed', {'frame': frame, 'gesture': consistent_gesture})
 
 @app.route('/')
 def index():
     return render_template('index.html')
-
-@app.route('/video_feed')
-def video_feed():
-    return Response(process_frame(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @socketio.on('connect')
 def on_connect():
@@ -155,6 +145,10 @@ def on_connect():
 @socketio.on('disconnect')
 def on_disconnect():
     print('Client disconnected')
+
+@socketio.on('request_video_feed')
+def handle_request_video_feed():
+    socketio.start_background_task(process_frame)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
