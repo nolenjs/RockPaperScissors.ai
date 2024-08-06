@@ -1,10 +1,12 @@
 from flask import Flask, render_template, Response
+from flask_socketio import SocketIO, emit
 import cv2 as cv
 import copy
 import csv
 from collections import Counter, deque
 import numpy as np
 import mediapipe as mp
+import base64
 import json
 from utils import CvFpsCalc
 from model import KeyPointClassifier, PointHistoryClassifier
@@ -21,6 +23,7 @@ from hand_utils import (
 )
 
 app = Flask(__name__)
+socketio = SocketIO(app)
 
 # Initialize video capture
 cap = cv.VideoCapture(0)
@@ -60,6 +63,7 @@ def process_frame():
         fps = cvFpsCalc.get()
         ret, image = cap.read()
         if not ret:
+            print("Failed to read frame from camera.")
             break
         image = cv.flip(image, 1)
         debug_image = copy.deepcopy(image)
@@ -102,16 +106,18 @@ def process_frame():
 
         # Encode the image as JPEG
         ret, jpeg = cv.imencode('.jpg', debug_image)
-        frame = jpeg.tobytes()
-        
+        if not ret:
+            print("Failed to encode frame as JPEG.")
+            break
+
+        frame = base64.b64encode(jpeg.tobytes()).decode('utf-8')
+
         if gesture:
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n' +
-                   b'--frame\r\n'
-                   b'Content-Type: application/json\r\n\r\n' + json.dumps({"gesture": gesture}).encode() + b'\r\n\r\n')
+            frame_data = json.dumps({"frame": frame, "gesture": gesture})
+            socketio.emit('frame_data', frame_data)
         else:
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+            frame_data = json.dumps({"frame": frame})
+            socketio.emit('frame_data', frame_data)
 
 @app.route('/')
 def index():
@@ -121,5 +127,14 @@ def index():
 def video_feed():
     return Response(process_frame(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@socketio.on('connect')
+def on_connect():
+    print('Client connected')
+    socketio.start_background_task(target=process_frame)
+
+@socketio.on('disconnect')
+def on_disconnect():
+    print('Client disconnected')
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)

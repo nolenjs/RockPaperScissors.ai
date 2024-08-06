@@ -1,10 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const videoElement = document.getElementById('webcam');
+    const videoElement = document.getElementById('video-feed');
     const gestureOutputElement = document.getElementById('gesture_output');
     const resultElement = document.getElementById('result');
-    
+
     const gestures = ['Rock', 'Paper', 'Scissors'];
-    
+
     // Function to get a random gesture for the AI
     function getRandomGesture() {
         return gestures[Math.floor(Math.random() * gestures.length)];
@@ -28,43 +28,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const aiGesture = getRandomGesture();
         const result = determineWinner(userGesture, aiGesture);
         resultElement.innerText = `You: ${userGesture} - AI: ${aiGesture}\n${result}`;
+        console.log(`You: ${userGesture} - AI: ${aiGesture}\n${result}`);
     }
 
-    // Function to process the gesture data
-    function processGestureData(data) {
-        if (data.gesture) {
-            gestureOutputElement.innerText = `Gesture: ${data.gesture}`;
-            handleGame(data.gesture);
+    // WebSocket connection
+    const socket = io();
+
+    socket.on('connect', () => {
+        console.log('Connected to the server');
+    });
+
+    socket.on('frame_data', (data) => {
+        const parsedData = JSON.parse(data);
+        if (parsedData.frame) {
+            const imgSrc = `data:image/jpeg;base64,${parsedData.frame}`;
+            videoElement.src = imgSrc;
         }
-    }
-
-    // Function to start the video feed and listen for gestures
-    async function startVideoFeed() {
-        const response = await fetch('/video_feed');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-
-        let jsonBuffer = '';
-
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            const text = decoder.decode(value, { stream: true });
-            const parts = text.split('--gesture');
-
-            if (parts.length > 1) {
-                jsonBuffer += parts[1];
-                try {
-                    const gestureData = JSON.parse(jsonBuffer.trim());
-                    processGestureData(gestureData);
-                    jsonBuffer = ''; // Reset the buffer after successful parsing
-                } catch (e) {
-                    // Wait for more data
-                }
-            }
+        if (parsedData.gesture) {
+            gestureOutputElement.innerText = `Gesture: ${parsedData.gesture}`;
+            handleGame(parsedData.gesture);
         }
-    }
+    });
 
-    startVideoFeed();
+    socket.on('disconnect', () => {
+        console.log('Disconnected from the server');
+    });
 });

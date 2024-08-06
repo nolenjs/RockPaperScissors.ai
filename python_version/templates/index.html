@@ -1,19 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rock-Paper-Scissors AI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.0/socket.io.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}" defer></script>
 </head>
+
 <body>
     <h1>Rock-Paper-Scissors AI</h1>
     <div id="video-container">
-        <video id="webcam" autoplay playsinline></video>
+        <img id="video-feed" width="640" height="480" />
         <canvas id="output_canvas"></canvas>
     </div>
     <div id="gesture_output">Gesture: None</div>
     <div id="result">Result: None</div>
 </body>
+
 </html>
